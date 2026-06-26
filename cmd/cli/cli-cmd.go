@@ -11,8 +11,8 @@ import (
 	"go.viam.com/rdk/resource"
 	"go.viam.com/rdk/services/generic"
 
-	"github.com/erh/viamstreamdeck"
 	"github.com/erh/vmodutils"
+	viamstreamdeck "github.com/viam-modules/chess-streamdeck"
 )
 
 func main() {
@@ -99,4 +99,8 @@ func (tt *TestThing) DoCommand(ctx context.Context, cmd map[string]interface{}) 
 
 func (tt *TestThing) Name() resource.Name {
 	return tt.name
+}
+
+func (tt *TestThing) Status(ctx context.Context) (map[string]interface{}, error) {
+	return map[string]interface{}{}, nil
 }

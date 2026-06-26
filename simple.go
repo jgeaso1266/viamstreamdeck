@@ -3,6 +3,7 @@ package viamstreamdeck
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -450,6 +451,7 @@ func (sdc *streamdeckComponent) handleKeyPress(ctx context.Context, s streamdeck
 			return err
 		}
 		sdc.logger.Infof("event %v got result %v", e, res)
+		sdc.maybeSwitchMode(ctx, res)
 		return nil
 	} else if k.snakeMethod() == "SetPosition" {
 		s, err := sdc.findSwitch(ctx, k.Component)
@@ -483,6 +485,7 @@ func (sdc *streamdeckComponent) handleDialTurn(ctx context.Context, s streamdeck
 			return err
 		}
 		sdc.logger.Infof("res: %v", res)
+		sdc.maybeSwitchMode(ctx, res)
 		return nil
 	case "SetPosition":
 		sw, ok := r.(toggleswitch.Switch)
@@ -558,6 +561,50 @@ func (sdc *streamdeckComponent) DoCommand(ctx context.Context, cmd map[string]in
 	}
 
 	return nil, fmt.Errorf("unknown command, supported commands: set_page, update_display")
+}
+
+// extractMode returns the page name carried in a DoCommand response under the
+// fixed "mode" field, and whether a usable value was found. The value may be a
+// string page name or a number (DoCommand results arrive as float64 over gRPC),
+// which is normalized to its integer string form (e.g. 2 -> "2") to match the
+// string page names in the config.
+func extractMode(res map[string]interface{}) (string, bool) {
+	if res == nil {
+		return "", false
+	}
+	switch v := res["mode"].(type) {
+	case string:
+		if v == "" {
+			return "", false
+		}
+		return v, true
+	case float64:
+		return strconv.Itoa(int(v)), true
+	case int:
+		return strconv.Itoa(v), true
+	case int32:
+		return strconv.Itoa(int(v)), true
+	case int64:
+		return strconv.Itoa(int(v)), true
+	default:
+		return "", false
+	}
+}
+
+// maybeSwitchMode inspects a DoCommand response and, if it carries a "mode"
+// field, switches the deck to the page named by that value. A missing mode,
+// unknown page, or non-paged config is logged and otherwise ignored - the
+// originating button press is still considered successful.
+func (sdc *streamdeckComponent) maybeSwitchMode(ctx context.Context, res map[string]interface{}) {
+	mode, ok := extractMode(res)
+	if !ok {
+		return
+	}
+
+	err := sdc.setPage(ctx, mode)
+	if err != nil {
+		sdc.logger.Warnf("could not switch to mode %q from DoCommand response: %v", mode, err)
+	}
 }
 
 func (sdc *streamdeckComponent) setPage(ctx context.Context, pageName string) error {

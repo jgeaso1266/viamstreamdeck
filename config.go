@@ -90,7 +90,7 @@ type Config struct {
 	Pages       map[string][]KeyConfig `json:"pages,omitempty"`
 	InitialPage string                 `json:"initial_page,omitempty"`
 	Dials       []DialConfig
-	Assets      *AssetsConfig          `json:"assets,omitempty"`
+	Assets      *AssetsConfig `json:"assets,omitempty"`
 }
 
 type UpdateDisplayCommand struct {

@@ -5,7 +5,7 @@ import (
 	"go.viam.com/rdk/resource"
 	"go.viam.com/rdk/services/generic"
 
-	"github.com/erh/viamstreamdeck"
+	viamstreamdeck "github.com/viam-modules/chess-streamdeck"
 )
 
 func main() {

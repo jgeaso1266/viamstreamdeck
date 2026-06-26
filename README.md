@@ -1,6 +1,8 @@
-# Module viam-streamdeck 
+# Module chess-streamdeck
 
-Integration with Elgato StreamDeck
+Integration with Elgato StreamDeck.
+
+This is a fork of [`erh:viam-streamdeck`](https://github.com/erh/viamstreamdeck) that adds **response-driven page switching**: when a key press or dial turn issues a `DoCommand` to another component, the Stream Deck waits for the response and, if it contains a `"mode"` field, automatically switches to the page named by that value. See [Response-driven page switching](#response-driven-page-switching).
 
 ## attributes
 
@@ -270,6 +272,46 @@ Instead of a flat list of keys, you can organize keys into named pages and switc
 ```
 
 You cannot use `keys` and `pages` at the same time.
+
+### Response-driven page switching
+
+When a key (`do_command`) or dial (`DoCommand`) sends a command to another component, the Stream Deck waits for the response and inspects it for a `"mode"` field. If present and a non-empty string, the deck switches to the page of that name — exactly as if `set_page` had been called on itself.
+
+This lets a separate module own the navigation logic: the deck sends it a command, the module decides what should be shown next, and replies with the page to display.
+
+```json
+{
+  "brightness": 100,
+  "initial_page": "menu",
+  "pages": {
+    "menu": [
+      {
+        "key": 0,
+        "text": "Play",
+        "component": "chess-logic",
+        "method": "do_command",
+        "args": [{ "action": "start_game" }]
+      }
+    ],
+    "board": [
+      {
+        "key": 0,
+        "text": "Resign",
+        "component": "chess-logic",
+        "method": "do_command",
+        "args": [{ "action": "resign" }]
+      }
+    ]
+  }
+}
+```
+
+In the example above, pressing `Play` sends `{"action": "start_game"}` to the `chess-logic` component. If `chess-logic` replies with `{"mode": "board"}`, the deck automatically switches to the `board` page.
+
+Behavior notes:
+- The check is automatic for every `do_command` key and dial — no extra config flag.
+- If the response has no `"mode"` field (or it is not a non-empty string), nothing changes.
+- If `"mode"` names a page that does not exist, or the config uses flat `keys` instead of `pages`, a warning is logged and the button press is still considered successful.
 
 ## pickup
 

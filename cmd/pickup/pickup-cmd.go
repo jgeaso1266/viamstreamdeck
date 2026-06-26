@@ -9,8 +9,8 @@ import (
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/services/generic"
 
-	"github.com/erh/viamstreamdeck"
 	"github.com/erh/vmodutils"
+	viamstreamdeck "github.com/viam-modules/chess-streamdeck"
 )
 
 func main() {
