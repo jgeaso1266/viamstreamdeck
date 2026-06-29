@@ -84,19 +84,76 @@ type AssetsConfig struct {
 	Images []string `json:"images,omitempty"`
 }
 
+// TouchscreenConfig drives the wide LCD strip above the dials on the Stream Deck
+// Plus. Text can be dynamic - sourced from a component's DoCommand and re-polled
+// on every refresh like the buttons reflect live state - or a static string.
+type TouchscreenConfig struct {
+	// Dynamic text source. When Component is set, each refresh we call its
+	// DoCommand with Request and display Field from the response.
+	Component string                 `json:"component,omitempty"`
+	Request   map[string]interface{} `json:"request,omitempty"` // payload sent to DoCommand
+	Field     string                 `json:"field,omitempty"`   // response key to display
+	Format    string                 `json:"format,omitempty"`  // optional fmt verb string, e.g. "temp: %v"
+
+	// Static fallback / styling.
+	Text            string  `json:"text,omitempty"` // shown when no Component
+	Image           string  `json:"image,omitempty"`
+	TextColor       string  `json:"text_color,omitempty"`
+	TextFont        *string `json:"text_font,omitempty"`
+	BackgroundColor string  `json:"background_color,omitempty"`
+
+	// Scrolling.
+	Scroll      bool `json:"scroll,omitempty"`
+	ScrollSpeed int  `json:"scroll_speed,omitempty"` // px/sec, default ~60
+}
+
+// Validate checks asset references and returns the component dependency (if any)
+// so RDK wires it up, mirroring how keys and dials register their components.
+func (tc *TouchscreenConfig) Validate() (string, error) {
+	if tc.TextFont != nil {
+		if _, ok := assetFonts[*tc.TextFont]; !ok {
+			availableFonts := []string{}
+			for fontName := range assetFonts {
+				availableFonts = append(availableFonts, fontName)
+			}
+			sort.Strings(availableFonts)
+			return "", fmt.Errorf("unknown font %s. Available fonts: %s", *tc.TextFont, strings.Join(availableFonts, ", "))
+		}
+	}
+
+	if tc.Image != "" {
+		if _, ok := assetImages[tc.Image]; !ok {
+			availableImages := []string{}
+			for imageName := range assetImages {
+				availableImages = append(availableImages, imageName)
+			}
+			sort.Strings(availableImages)
+			return "", fmt.Errorf("unknown image %s. Available images: %s", tc.Image, strings.Join(availableImages, ", "))
+		}
+	}
+
+	return tc.Component, nil
+}
+
 type Config struct {
 	Brightness  int
 	Keys        []KeyConfig            `json:"keys,omitempty"`
 	Pages       map[string][]KeyConfig `json:"pages,omitempty"`
 	InitialPage string                 `json:"initial_page,omitempty"`
 	Dials       []DialConfig
-	Assets      *AssetsConfig `json:"assets,omitempty"`
+	Assets      *AssetsConfig      `json:"assets,omitempty"`
+	Touchscreen *TouchscreenConfig `json:"touchscreen,omitempty"`
+	// Touchscreens holds an optional per-page strip config keyed by page name.
+	// When the current page has an entry it takes precedence over Touchscreen,
+	// which acts as the default for any page without its own entry.
+	Touchscreens map[string]*TouchscreenConfig `json:"touchscreens,omitempty"`
 }
 
 type UpdateDisplayCommand struct {
-	Brightness *int                              `mapstructure:"brightness"`
-	Keys       map[string]map[string]interface{} `mapstructure:"keys"`
-	Dials      map[string]map[string]interface{} `mapstructure:"dials"`
+	Brightness  *int                              `mapstructure:"brightness"`
+	Keys        map[string]map[string]interface{} `mapstructure:"keys"`
+	Dials       map[string]map[string]interface{} `mapstructure:"dials"`
+	Touchscreen map[string]interface{}            `mapstructure:"touchscreen"`
 }
 
 func (c *Config) Validate(p string) ([]string, []string, error) {
@@ -185,6 +242,30 @@ func (c *Config) Validate(p string) ([]string, []string, error) {
 
 		if !slices.Contains(ret, d.Component) {
 			ret = append(ret, d.Component)
+		}
+	}
+
+	// Validate touchscreen(s) and register their component dependencies (if any).
+	if c.Touchscreen != nil {
+		dep, err := c.Touchscreen.Validate()
+		if err != nil {
+			return nil, nil, fmt.Errorf("touchscreen: %w", err)
+		}
+		if dep != "" && !slices.Contains(ret, dep) {
+			ret = append(ret, dep)
+		}
+	}
+
+	for pageName, tc := range c.Touchscreens {
+		if tc == nil {
+			continue
+		}
+		dep, err := tc.Validate()
+		if err != nil {
+			return nil, nil, fmt.Errorf("touchscreen for page %s: %w", pageName, err)
+		}
+		if dep != "" && !slices.Contains(ret, dep) {
+			ret = append(ret, dep)
 		}
 	}
 

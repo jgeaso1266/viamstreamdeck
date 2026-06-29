@@ -286,8 +286,6 @@ github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f/go.mod h1:xH/i4TFM
 github.com/dgottlieb/smarty-assertions v1.2.6 h1:YAXgSslRBbVtd54iTqM4yGT2k1a2qS6cffNQo0SDxDY=
 github.com/dgottlieb/smarty-assertions v1.2.6/go.mod h1:x1wpV/RTxYWtN+vgrcRuCF4hjUmonK5NR59ZzQSym2k=
 github.com/dgrijalva/jwt-go v3.2.0+incompatible/go.mod h1:E3ru+11k8xSBh+hMPgOLZmtrrCbhqsmaPHjLKYnJCaQ=
-github.com/dh1tw/streamdeck v1.0.0 h1:YyK0g3BLuPQDXnNypwMBbDjbAUDdY073fYeTG5qPXH4=
-github.com/dh1tw/streamdeck v1.0.0/go.mod h1:+EqLcYGV7m9jyRVSLTpQkl0BDmRTJEcOTSfcrf1FRzs=
 github.com/disintegration/gift v1.2.1 h1:Y005a1X4Z7Uc+0gLpSAsKhWi4qLtsdEcMIbbdvdZ6pc=
 github.com/disintegration/gift v1.2.1/go.mod h1:Jh2i7f7Q2BM7Ezno3PhfezbR1xpUg9dUg3/RlKGr4HI=
 github.com/disintegration/imaging v1.6.2 h1:w1LecBlG2Lnp8B3jk5zSuNqd7b4DXhcjwek1ei82L+c=

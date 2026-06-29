@@ -2,6 +2,12 @@ module github.com/viam-modules/chess-streamdeck
 
 go 1.25.1
 
+// In-tree fork of dh1tw/streamdeck: adds SetTouchscreenImage for the Stream Deck
+// Plus LCD strip, which upstream does not support. libusb claims the USB
+// interface exclusively, so the strip must be written through the same handle
+// the library already owns - hence a fork rather than a second HID handle.
+replace github.com/dh1tw/streamdeck => ./third_party/streamdeck
+
 require (
 	github.com/bearsh/hid v1.6.0
 	github.com/dh1tw/streamdeck v1.0.0

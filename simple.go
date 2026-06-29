@@ -70,6 +70,9 @@ func NewStreamDeck(ctx context.Context, name resource.Name, deps resource.Depend
 		return nil, err
 	}
 
+	// Strip driver shares the library's HID handle; nil on non-Plus models.
+	sdc.ts = newTouchscreen(ms, sdc.sd, logger)
+
 	err = sdc.updateBrightness(conf.Brightness)
 	if err != nil {
 		return nil, err
@@ -120,7 +123,11 @@ func (sdc *streamdeckComponent) reconfigure(ctx context.Context, deps resource.D
 		return err
 	}
 
-	return sdc.updateKeys(ctx)
+	if err := sdc.updateKeys(ctx); err != nil {
+		return err
+	}
+
+	return sdc.updateTouchscreen(ctx)
 }
 
 type streamdeckComponent struct {
@@ -136,6 +143,18 @@ type streamdeckComponent struct {
 	keys       map[int]KeyConfig
 
 	currentPage string
+
+	// Touchscreen strip state. ts is the second (write-only) HID handle, nil on
+	// non-Plus decks or if it couldn't be opened. tsText holds the latest
+	// resolved strip text (read by the scroll goroutine, guarded by tsMu).
+	// tsCancel/tsApplied track the running scroll goroutine so reconfigure only
+	// restarts it when the rendering config actually changes.
+	ts        *touchscreen
+	tsMu      sync.Mutex
+	tsText    string
+	tsHasText bool
+	tsCancel  context.CancelFunc
+	tsApplied tsLoopKey
 
 	closed atomic.Int32
 }
@@ -191,6 +210,45 @@ func (sdc *streamdeckComponent) applyDialUpdate(existing DialConfig, updates map
 	}
 
 	return result, nil
+}
+
+// applyTouchscreenUpdate merges runtime updates into an existing touchscreen
+// config and returns the result, mirroring applyKeyUpdate.
+func (sdc *streamdeckComponent) applyTouchscreenUpdate(existing TouchscreenConfig, updates map[string]interface{}) TouchscreenConfig {
+	result := existing
+
+	if component, ok := updates["component"].(string); ok {
+		result.Component = component
+	}
+	if request, ok := updates["request"].(map[string]interface{}); ok {
+		result.Request = request
+	}
+	if field, ok := updates["field"].(string); ok {
+		result.Field = field
+	}
+	if format, ok := updates["format"].(string); ok {
+		result.Format = format
+	}
+	if text, ok := updates["text"].(string); ok {
+		result.Text = text
+	}
+	if img, ok := updates["image"].(string); ok {
+		result.Image = img
+	}
+	if textColor, ok := updates["text_color"].(string); ok {
+		result.TextColor = textColor
+	}
+	if bgColor, ok := updates["background_color"].(string); ok {
+		result.BackgroundColor = bgColor
+	}
+	if scroll, ok := updates["scroll"].(bool); ok {
+		result.Scroll = scroll
+	}
+	if speed, ok := updates["scroll_speed"].(float64); ok {
+		result.ScrollSpeed = int(speed)
+	}
+
+	return result
 }
 
 func (sdc *streamdeckComponent) isSelfReference(componentName string) bool {
@@ -531,7 +589,7 @@ func (sdc *streamdeckComponent) stateChecker() {
 
 func (sdc *streamdeckComponent) Close(ctx context.Context) error {
 	sdc.closed.Store(1)
-	return multierr.Combine(sdc.sd.ClearAllBtns(), sdc.sd.Close())
+	return multierr.Combine(sdc.closeTouchscreen(), sdc.sd.ClearAllBtns(), sdc.sd.Close())
 }
 
 func (sdc *streamdeckComponent) Status(ctx context.Context) (map[string]interface{}, error) {
@@ -630,7 +688,12 @@ func (sdc *streamdeckComponent) setPage(ctx context.Context, pageName string) er
 	sdc.currentPage = pageName
 
 	// Load the new keys
-	return sdc.applyKeys(ctx, keys)
+	if err := sdc.applyKeys(ctx, keys); err != nil {
+		return err
+	}
+
+	// Switch the strip to this page's touchscreen config immediately.
+	return sdc.updateTouchscreen(ctx)
 }
 
 func (sdc *streamdeckComponent) handleUpdateDisplay(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
@@ -750,6 +813,23 @@ func (sdc *streamdeckComponent) handleUpdateDisplay(ctx context.Context, cmd map
 		}
 
 		updated["dials"] = updatedDials
+	}
+
+	// Handle touchscreen update - targets whichever strip config is currently
+	// showing (the per-page entry if any, else the global default).
+	if updateCmd.Touchscreen != nil {
+		existing := TouchscreenConfig{}
+		if active := sdc.activeTouchscreen(); active != nil {
+			existing = *active
+		}
+		newTouchscreen := sdc.applyTouchscreenUpdate(existing, updateCmd.Touchscreen)
+		sdc.setActiveTouchscreen(&newTouchscreen)
+
+		if err := sdc.updateTouchscreen(ctx); err != nil {
+			return nil, fmt.Errorf("failed to update touchscreen: %w", err)
+		}
+
+		updated["touchscreen"] = true
 	}
 
 	if len(updated) == 0 {
